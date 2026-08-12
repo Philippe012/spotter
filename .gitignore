@@ -1,0 +1,52 @@
+# .gitignore
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Data
+data/raw/*.csv
+data/processed/*.parquet
+!data/raw/*-template.csv
+!data/raw/*-inputs.csv
+
+# Models
+*.pkl
+*.joblib
+models/*
+
+# Outputs
+outputs/predictions/*.csv
+!outputs/predictions/*-template.csv
+outputs/figures/*.png
+outputs/reports/*.txt
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temp files
+tmp/
+temp/
