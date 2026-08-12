@@ -49,7 +49,7 @@ def load_validation_data(file_path: Optional[Path] = None) -> pd.DataFrame:
     validate_dataframe(df, required_cols)
     
     if TARGET_COLUMN in df.columns:
-        logger.warning(f"Target column "{TARGET_COLUMN}" found in validation data - removing")
+        logger.warning(f"Target column '{TARGET_COLUMN}' found in validation data - removing")
         df = df.drop(columns=[TARGET_COLUMN])
     
     logger.info(f"Data shape: {df.shape}")

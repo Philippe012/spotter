@@ -13,7 +13,7 @@ from src.utils import setup_logger, validate_dataframe
 logger = setup_logger('preprocessing')
 
 
-class DataProcessor:
+class DataPreprocessor:
     def __init__(self, train_data: Optional[pd.DataFrame] = None):
         self.us_holidays = holidays.US(years=range(2024, 2027))
         self.fitted = False

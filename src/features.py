@@ -6,7 +6,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from typing import Optional, List, Tuple
 from src.utils import setup_logger
-from src.config import CATEGORICAL_FEATURES, NUMERICAL_FEATURES, RANDOM_STATE
+from src.config import CATEGORICAL_FEATURES, NUMERICAL_FEATURES, RANDOM_STATE, TARGET_COLUMN, ID_COLUMN
 
 
 logger = setup_logger("features")
@@ -205,6 +205,7 @@ class FeatureEngineer:
                          'rate_per_mile', 'weight_per_mile', 'lat_diff', 'lon_diff',
                          'distance_weight', 'market_distance', 'market_weight',
                          'quote_distance', 'quote_weight', 'market_quote']
+            
             available_numerical = [col for col in numerical_cols if col in df.columns]
             df = self.scale_numerical(df, available_numerical)
             logger.info(f"Scaled numerical features, shape: {df.shape}")

@@ -36,7 +36,7 @@ def validate_predictions(predictions_df: pd.DataFrame,
     
     if template_df is not None:
         if len(predictions_df) != len(template_df):
-            logger.error(f"Prediction count ({len(predictions_df)}) doesn"t match template ({len(template_df)})")
+            logger.error(f"Prediction count ({len(predictions_df)}) doesn't match template ({len(template_df)})")
             return False
         
         missing_ids = set(template_df[ID_COLUMN]) - set(predictions_df[ID_COLUMN])

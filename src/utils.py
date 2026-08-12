@@ -65,7 +65,6 @@ class Timer:
         
     
 def format_time(seconds: float) -> str:
-    """Format time in seconds to human-readable string."""
     if seconds < 60:
         return f"{seconds:.1f} seconds"
     elif seconds < 3600:
