@@ -20,6 +20,9 @@ class ModelEvaluator:
         
     def evaluate(self, y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
         # calculating evaluation metrics
+        if np.mean(y_pred) < 10 and np.mean(y_true) > 100:
+            logger.warning("Predictions appear to be in log-space. Converting to original scale...")
+            y_pred = np.expm1(y_pred)
         
         metrics = {
             "rmse": calculate_rmse(y_true, y_pred),

@@ -5,6 +5,7 @@ from pathlib import Path
 import joblib
 import pandas as pd
 import time
+import numpy as np
 
 sys.path.append(str(Path(__file__).parent))
 
@@ -17,7 +18,7 @@ from src.config import (
 from src.data_loader import load_train_data, load_validation_data, load_template, save_predictions
 from src.preprocessing import DataPreprocessor
 from src.features import FeatureEngineer
-from src.train import ModelTrainer
+from src.train import EnsembleTrainer
 from src.predict import Predictor
 from src.evaluate import ModelEvaluator
 from score import validate_predictions, save_december_chart
@@ -61,6 +62,7 @@ def main():
             train_df = load_train_data()
             validation_df = load_validation_data()
             template_df = load_template()
+            logger.info(f"Train columns: {train_df.columns.tolist()}")
             
             logger.info( "Training data: %s rows, %s columns", f"{len(train_df):,}", len(train_df.columns), ) 
             logger.info( "Validation data: %s rows, %s columns", f"{len(validation_df):,}", len(validation_df.columns), ) 
@@ -80,14 +82,34 @@ def main():
             logger.info(f"Validation data processed: {validation_processed.shape}")
            
             
-            logger.info("Feature Engineering")            
+            logger.info("Feature Engineering")
+
+            cutoff_index = max(1, int(len(train_processed) * 0.8))
+            cutoff_date = train_processed["date"].iloc[cutoff_index - 1]
+
+            train_pre = train_processed[train_processed["date"] <= cutoff_date].reset_index(drop=True)
+            val_post = train_processed[train_processed["date"] > cutoff_date].reset_index(drop=True)
+
             feature_engineer = FeatureEngineer()
-            
-            
-            train_features, feature_names = feature_engineer.fit_transform(train_processed)
-                        
+
+            train_features, feature_names = feature_engineer.fit_transform(train_pre)
+            time_val_features = feature_engineer.transform(val_post)
+
             logger.info(f"Training features: {train_features.shape}")
             logger.info(f"Number of features: {len(feature_names)}")
+
+            logger.info(f"{(train_features[TARGET_COLUMN] > 7500).sum()} rows above $7,500")
+            logger.info(train_features[TARGET_COLUMN].describe())
+
+            high = train_features[train_features[TARGET_COLUMN] > 7500]
+            low = train_features[train_features[TARGET_COLUMN] <= 7500]
+            logger.info(f"High-rate rows: {len(high)} ({len(high)/len(train_features)*100:.2f}%)")
+            logger.info(f"High-rate top equipment: {high['equipment'].value_counts(normalize=True).head(3).to_dict()}")
+            logger.info(f"Low-rate top equipment: {low['equipment'].value_counts(normalize=True).head(3).to_dict()}")
+            logger.info(f"High-rate distance mean/median: {high['distance'].mean():.0f} / {high['distance'].median():.0f}")
+            logger.info(f"Low-rate distance mean/median: {low['distance'].mean():.0f} / {low['distance'].median():.0f}")
+            logger.info(f"High-rate top regions: {high['pickup_region'].value_counts().head(3).to_dict()}")
+            logger.info(f"High-rate top routes: {high['route_pair'].value_counts().head(5).to_dict()}")
 
             feature_columns = [
                 col for col in feature_names
@@ -95,21 +117,15 @@ def main():
                 and pd.api.types.is_numeric_dtype(train_features[col])
                 and col != "rate_per_mile"
             ]
-            
-            
-            train_features = train_features.sort_values("date").reset_index(drop=True)
 
-            cutoff_index = max(1, int(len(train_features) * 0.8))
-            cutoff_date = train_features["date"].iloc[cutoff_index - 1]
+            X_train = train_features[feature_columns].values
+            y_train = train_features[TARGET_COLUMN].values
 
-            train_mask = train_features["date"] <= cutoff_date
-            val_mask = train_features["date"] > cutoff_date
+            X_time_val = time_val_features[feature_columns].values
+            y_time_val = time_val_features[TARGET_COLUMN].values
 
-            X_train = train_features.loc[train_mask, feature_columns].values
-            y_train = train_features.loc[train_mask, TARGET_COLUMN].values
-
-            X_time_val = train_features.loc[val_mask, feature_columns].values
-            y_time_val = train_features.loc[val_mask, TARGET_COLUMN].values
+            y_train_model = np.log1p(y_train)
+            y_val_model = np.log1p(y_time_val)
 
             logger.info(
                 "Time-based split: training=%d, validation=%d",
@@ -131,32 +147,31 @@ def main():
             
             logger.info("Training Model")
             
-            trainer = ModelTrainer()
+            trainer = EnsembleTrainer()
             
             if not args.predict_only:
-                model = trainer.train(
-                    X_train, y_train,X_val=X_time_val, y_val=y_time_val,
+                trainer.train(
+                    X_train,
+                    y_train_model,
+                    X_time_val,
+                    y_val_model,
                     tune_hyperparameters=not args.skip_tune,
                     n_trials=args.n_trials
                 )
-                
                 trainer.save_models()
                 joblib.dump(feature_names, FEATURE_NAMES_PATH)
                 logger.info(f"Feature names saved to {FEATURE_NAMES_PATH}")
             else:
                 trainer.load_model()
-                logger.info("Using existing model")
+                logger.info("Using existing ensemble model")
             
             
             logger.info("Evaluating Model")
             
             evaluator = ModelEvaluator()
             
-            y_pred_time_val = trainer.model.predict(X_time_val)
-
-            metrics = evaluator.evaluate(
-                y_time_val, y_pred_time_val
-            )
+            y_pred_time_val = np.expm1(trainer.predict(X_time_val))
+            metrics = evaluator.evaluate(y_time_val, y_pred_time_val)
 
             logger.info(
                 "November validation performance: "
@@ -188,6 +203,11 @@ def main():
             logger.info("Generating Predictions")
             
             predictor = Predictor(trainer.model)
+            X_val = validation_features[feature_columns].values
+            validation_predictions = predictor.predict_validation_data(
+                X_val,
+                validation_features[ID_COLUMN].values,
+            )
             
             missing_features = [
                 col for col in feature_columns
