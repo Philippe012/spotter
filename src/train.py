@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split, KFold
+from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 import lightgbm as lgb
 import optuna
@@ -37,21 +37,55 @@ class ModelTrainer:
         
         def objective(trial):
             params = {
-                    'num_leaves': trial.suggest_int('num_leaves', 2, 100),
-                'max_depth': trial.suggest_int('max_depth', 3, 15),
-                'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
-                'n_estimators': trial.suggest_int('n_estimators', 100, 1000),
-                'min_child_samples': trial.suggest_int('min_child_samples', 5, 100),
-                'subsample': trial.suggest_float('subsample', 0.6, 1.0),
-                'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
-                'reg_alpha': trial.suggest_float('reg_alpha', 0.0, 10.0),
-                'reg_lambda': trial.suggest_float('reg_lambda', 0.0, 10.0),
-                'min_split_gain': trial.suggest_float('min_split_gain', 0.0, 1.0)
+                'num_leaves': trial.suggest_int(
+                    'num_leaves',
+                    *TUNING_SPACE['num_leaves']
+                ),
+                'max_depth': trial.suggest_int(
+                    'max_depth',
+                    *TUNING_SPACE['max_depth']
+                ),
+                'learning_rate': trial.suggest_float(
+                    'learning_rate',
+                    *TUNING_SPACE['learning_rate'],
+                    log=True
+                ),
+                'n_estimators': trial.suggest_int(
+                    'n_estimators',
+                    *TUNING_SPACE['n_estimators']
+                ),
+                'min_child_samples': trial.suggest_int(
+                    'min_child_samples',
+                    *TUNING_SPACE['min_child_samples']
+                ),
+                'subsample': trial.suggest_float(
+                    'subsample',
+                    *TUNING_SPACE['subsample']
+                ),
+                'colsample_bytree': trial.suggest_float(
+                    'colsample_bytree',
+                    *TUNING_SPACE['colsample_bytree']
+                ),
+                'reg_alpha': trial.suggest_float(
+                    'reg_alpha',
+                    *TUNING_SPACE['reg_alpha']
+                ),
+                'reg_lambda': trial.suggest_float(
+                    'reg_lambda',
+                    *TUNING_SPACE['reg_lambda']
+                ),
+                'min_split_gain': trial.suggest_float(
+                    'min_split_gain',
+                    *TUNING_SPACE['min_split_gain']
+                )
             }
             
             params.update(MODEL_PARAMS)
             
-            model = lgb.LGBMRegressor(**params, random_state=self.random_state)
+            local_params = params.copy()
+            local_params.pop("random_state", None)
+            model = lgb.LGBMRegressor(**local_params, random_state=self.random_state)
+
             model.fit(
                 X_train, y_train,
                 eval_set=[(X_val, y_val)],
@@ -81,138 +115,147 @@ class ModelTrainer:
                       params: Dict[str, Any]) -> Dict[str, Any]:
         # Performing cross validation with some given parameters
             logger.info(f"Starting {self.cv_folds}-fold cross-validation...")
-        
-            kf = KFold(n_splits=self.cv_folds, shuffle=True, random_state=self.random_state)
+            
+            tscv = TimeSeriesSplit(n_splits=self.cv_folds)
             cv_scores = {'rmse': [], 'mae': [], 'mape': []}
             
-            for fold, (train_idx, val_idx) in enumerate(kf.split(X), 1):
+            for fold, (train_idx, val_idx) in enumerate(tscv.split(X), 1):
                 X_train, X_val = X[train_idx], X[val_idx]
                 y_train, y_val = y[train_idx], y[val_idx]
-                
-                model = lgb.LGBMRegressor(**params, random_state=self.random_state)
+
+                local_params = params.copy()
+                local_params.pop("random_state", None)
+                model = lgb.LGBMRegressor(**local_params, random_state=self.random_state)
+
                 model.fit(
                     X_train, y_train,
                     eval_set=[(X_val, y_val)],
-                    eval_metric='rmse',
-                    callbacks=[lgb.early_stopping(50), lgb.log_evaluation(0)]
+                    eval_metric="rmse",
+                    callbacks=[lgb.early_stopping(50), lgb.log_evaluation(0)],
                 )
-                
+
                 y_pred = model.predict(X_val)
-                
-                cv_scores['rmse'].append(calculate_rmse(y_val, y_pred))
-                cv_scores['mae'].append(calculate_mae(y_val, y_pred))
-                cv_scores['mape'].append(calculate_mape(y_val, y_pred))
-                
-                logger.info(f"Fold {fold}: RMSE={cv_scores['rmse'][-1]:.2f}, "
-                        f"MAE={cv_scores['mae'][-1]:.2f}, "
-                        f"MAPE={cv_scores['mape'][-1]:.2f}%")
-                
-                results = {
-                    'mean_rmse': np.mean(cv_scores['rmse']),
-                    'std_rmse': np.std(cv_scores['rmse']),
-                    'mean_mae': np.mean(cv_scores['mae']),
-                    'std_mae': np.std(cv_scores['mae']),
-                    'mean_mape': np.mean(cv_scores['mape']),
-                    'std_mape': np.std(cv_scores['mape']),
-                    'cv_scores': cv_scores
-                }
-                
-                logger.info(f"CV Results: RMSE={results['mean_rmse']:.2f} (±{results['std_rmse']:.2f}), "
-                   f"MAE={results['mean_mae']:.2f} (±{results['std_mae']:.2f})")
-        
-                self.cv_results = results
-                return results
-            
-            
-            def train_final_model(self, X: np.ndarray, y: np.ndarray,
-                                  params: Dict[str, Any]) -> lgb.LGBMRegressor:
-                
-                # Training final model on all data with best parameters
-                logger.info("Training final model on all data...")
-        
-                with Timer() as timer:
-                    model = lgb.LGBMRegressor(**params, random_state=self.random_state)
-                    model.fit(X, y)
-                
-                logger.info(f"Final model trained in {timer.seconds:.1f} seconds")
-                
-                self.model = model
-                self.is_fitted = True
-                
-                self.feature_importance = pd.DataFrame({
-                    'feature': range(X.shape[1]),
-                    'importance': model.feature_importances_
-                }).sort_values('importance', ascending=False)
-                
-                return model
-            
-            def train(self, X: np.ndarray, y: np.ndarray, 
-                tune_hyperparameters: bool = True,
-                n_trials: int = 100) -> lgb.LGBMRegressor:
-                
-                logger.info(f"Starting model training with {len(y):,} samples, {X.shape[1]} features")
-                
-                X_train, X_val, y_train, y_val = train_test_split(
-                    X, y, test_size=0.2, random_state=self.random_state
+
+                cv_scores["rmse"].append(calculate_rmse(y_val, y_pred))
+                cv_scores["mae"].append(calculate_mae(y_val, y_pred))
+                cv_scores["mape"].append(calculate_mape(y_val, y_pred))
+
+                logger.info(
+                    f"Fold {fold}: RMSE={cv_scores['rmse'][-1]:.2f}, "
+                    f"MAE={cv_scores['mae'][-1]:.2f}, "
+                    f"MAPE={cv_scores['mape'][-1]:.2f}%"
                 )
-                
-                logger.info(f"Training set: {len(y_train):,} samples")
-                logger.info(f"Validation set: {len(y_val):,} samples")
-                
-                # Hyperpara,meter tuning
-                if tune_hyperparameters:
-                    params = self.tune_hyperparameters(X_train, y_train, X_val, y_val, n_trials)
-                else:
-                    params = {
-                    'num_leaves': 31,
-                    'max_depth': -1,
-                    'learning_rate': 0.1,
-                    'n_estimators': 300,
-                    'min_child_samples': 20,
-                    'subsample': 1.0,
-                    'colsample_bytree': 1.0,
-                    'reg_alpha': 0.0,
-                    'reg_lambda': 0.0,
-                    'min_split_gain': 0.0
-                }
-                logger.info("Using default parameters (no tuning)")
-                
-                params.update(MODEL_PARAMS)
-                
-                self.cross_validate(X, y, params)
-                model = self.train_final_model(X, y, params)
-                
-                return model
+
+            results = {
+                "mean_rmse": np.mean(cv_scores["rmse"]),
+                "std_rmse": np.std(cv_scores["rmse"]),
+                "mean_mae": np.mean(cv_scores["mae"]),
+                "std_mae": np.std(cv_scores["mae"]),
+                "mean_mape": np.mean(cv_scores["mape"]),
+                "std_mape": np.std(cv_scores["mape"]),
+                "cv_scores": cv_scores,
+            }
+
+            logger.info(
+                f"CV Results: RMSE={results['mean_rmse']:.2f} (±{results['std_rmse']:.2f}), "
+                f"MAE={results['mean_mae']:.2f} (±{results['std_mae']:.2f})"
+            )
+
+            self.cv_results = results
+            return results
             
             
-            def save_models(self, file_path: Optional[Path] = None) -> None:
-                if file_path is None:
-                    file_path = MODEL_SAVE_PATH
-                    
-                if not self.is_fitted:
-                    raise ValueError("Model must be trained before saving")
-                
-                file_path.parent.mkdir(parents=True, exist_ok=True)
-                joblib.dump(self.model, file_path)
-                logger.info(f"Model saved to {file_path}")
-                
-                
-                if self.feature_importance is not None:
-                    importance_path = file_path.parent / 'feature_importance.csv'
-                    self.feature_importance.to_csv(importance_path, index=False)
-                    logger.info(f"Feature importance saved to {importance_path}")
-                    
+    def train_final_model(self, X: np.ndarray, y: np.ndarray,
+                            params: Dict[str, Any]) -> lgb.LGBMRegressor:
+        
+        # Training final model on all data with best parameters
+        logger.info("Training final model on all data...")
+
+        with Timer() as timer:
+            local_params = params.copy()
+            local_params.pop("random_state", None)
+            model = lgb.LGBMRegressor(**local_params, random_state=self.random_state)
+
+            model.fit(X, y)
+        
+        logger.info(f"Final model trained in {timer.seconds:.1f} seconds")
+        
+        self.model = model
+        self.is_fitted = True
+        
+        self.feature_importance = pd.DataFrame({
+            'feature': range(X.shape[1]),
+            'importance': model.feature_importances_,
+        }).sort_values('importance', ascending=False)
+        
+        return model
+    
+    def train(self, X_train: np.ndarray, y_train: np.ndarray, X_val: np.ndarray, y_val: np.ndarray,
+        tune_hyperparameters: bool = True,
+        n_trials: int = 100) -> lgb.LGBMRegressor:
+        
+        logger.info(
+            "Starting model training with %d training samples, "
+            "%d validation samples, %d features",
+            len(y_train), len(y_val), X_train.shape[1]
+        )
+
+        logger.info("Training set: %d samples", len(y_train))
+        logger.info("Validation set: %d samples", len(y_val))
+
+        if tune_hyperparameters:
+            params = self.tune_hyperparameters(X_train, y_train, X_val, y_val, n_trials)
+        else:
+            params = {
+                "num_leaves": 31,
+                "max_depth": -1,
+                "learning_rate": 0.1,
+                "n_estimators": 300,
+                "min_child_samples": 20,
+                "subsample": 1.0,
+                "colsample_bytree": 1.0,
+                "reg_alpha": 0.0,
+                "reg_lambda": 0.0,
+                "min_split_gain": 0.0,
+            }
+            logger.info("Using default parameters (no tuning)")
+
+        params.update(MODEL_PARAMS)
+
+        self.cross_validate(X_train, y_train, params)
+        model = self.train_final_model(X_train, y_train, params)
+
+        return model
+    
+    
+    def save_models(self, file_path: Optional[Path] = None) -> None:
+        if file_path is None:
+            file_path = MODEL_SAVE_PATH
             
-            def load_model(self, file_path: Optional[Path] = None) -> lgb.LGBMRegressor:
-                if file_path is None:
-                    file_path = MODEL_SAVE_PATH
-                    
-                if not file_path.exists():
-                    raise FileNotFoundError(f"Model file not found: {file_path}")
-                
-                
-                self.model = joblib.load(file_path)
-                self.is_fitted = True
-                logger.info(f"Model loaded from {file_path}")
-                return self.model
+        if not self.is_fitted:
+            raise ValueError("Model must be trained before saving")
+        
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(self.model, file_path)
+        logger.info(f"Model saved to {file_path}")
+        
+        
+        if self.feature_importance is not None:
+            importance_path = file_path.parent / 'feature_importance.csv'
+            self.feature_importance.to_csv(importance_path, index=False)
+            logger.info(f"Feature importance saved to {importance_path}")
             
+    
+    def load_model(self, file_path: Optional[Path] = None) -> lgb.LGBMRegressor:
+        if file_path is None:
+            file_path = MODEL_SAVE_PATH
+            
+        if not file_path.exists():
+            raise FileNotFoundError(f"Model file not found: {file_path}")
+        
+        
+        self.model = joblib.load(file_path)
+        self.is_fitted = True
+        logger.info(f"Model loaded from {file_path}")
+        return self.model
+    

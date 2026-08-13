@@ -6,7 +6,7 @@ import joblib
 
 
 from src.config import (
-    MODEL_SAVE_PATH, PREDICTIONS_DIR, ID_COLUMN, TARGET_COLUMN,
+    MODEL_SAVE_PATH, PREDICTIONS_DIR, DECEMBER_CHART_FILE, DECEMBER_FIXED, ID_COLUMN, TARGET_COLUMN,
     MIN_PREDICTED_RATE, MAX_PREDICTED_RATE
 )
 from src.utils import setup_logger, clip_predictions
@@ -65,25 +65,35 @@ class Predictor:
         
         return result_df
     
-    def predict_december_chart(self, X: np.ndarray, 
-                              features_df: pd.DataFrame) -> pd.DataFrame:
-        # Predctions for December chart
-        logger.info(f"Generating predictions for December chart...")
+    def generate_december_predictions(self, X: np.ndarray, 
+                              dates: pd.DatetimeIndex) -> pd.DataFrame:
+        logger.info(f"Generating predictions for December for {len(dates)} days...")
         
         predictions = self.predict(X)
-        result_df = features_df.copy()
-        result_df["predicted_rate"] = predictions.round(2)
         
-        if "date" not in result_df.columns and "load_id" in result_df.columns:
-            pass
-        logger.info(f"December chart predictions generated for {len(predictions):,} rows")
+        december_df = pd.DataFrame({
+            'pickup': [DECEMBER_FIXED['pickup']] * len(dates),
+            'delivery': [DECEMBER_FIXED['delivery']] * len(dates),
+            'distance': [DECEMBER_FIXED['distance']] * len(dates),
+            'equipment': [DECEMBER_FIXED['equipment']] * len(dates),
+            'weight': [DECEMBER_FIXED['weight']] * len(dates),
+            'date': dates,
+            'predicted_rate': predictions.round(2)
+        })
         
-        return result_df
+        december_df = december_df[['pickup', 'delivery', 'distance', 'equipment', 'weight', 'date', 'predicted_rate']]
+        
+        logger.info(f"December predictions generated for {len(december_df)} days")
+        logger.info(f"Prediction summary:")
+        logger.info(f"Minimum rate: ${predictions.min():.2f}")
+        logger.info(f"Maximum rate: ${predictions.max():.2f}")
+        logger.info(f"Mean rate: ${predictions.mean():.2f}")
+        logger.info(f"Std rate: ${predictions.std():.2f}")
+        
+        return december_df
     
     def save_predictions(self, df:pd.DataFrame, output_path: Path) -> None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(output_path, index=False)
         logger.info(f"Predictions saved to {output_path}")
         
-        saved_df = pd.read_csv(output_path)
-        logger.info(f"Saved {len(saved_df):,} rows to {output_path}")

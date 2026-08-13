@@ -22,13 +22,17 @@ FIGURES_DIR = OUTPUT_DIR / "figures"
 REPORTS_DIR = OUTPUT_DIR / "reports"
 
 
+SCORER_RESULTS_DIR = PROJECT_ROOT / 'scorer_results'
+DECEMBER_CHART_OUTPUT = SCORER_RESULTS_DIR / 'candidate_december.png'
+
+
 MODEL_DIR = PROJECT_ROOT / "models"
 MODEL_SAVE_PATH = MODEL_DIR / "lightgbm_model.pkl"
 PREPROCESSOR_SAVE_PATH = MODEL_DIR / "preprocessor.pkl"
 FEATURE_NAMES_PATH = MODEL_DIR / "feature_names.pkl"
 
 for dir_path in [DATA_DIR, RAW_DATA_DIR, PROCESSED_DATA_DIR, OUTPUT_DIR, PREDICTIONS_DIR, FIGURES_DIR,
-                 REPORTS_DIR, MODEL_DIR]:
+                 REPORTS_DIR, MODEL_DIR, SCORER_RESULTS_DIR]:
     dir_path.mkdir(parents=True, exist_ok=True)
     
     
@@ -40,19 +44,6 @@ MODEL_PARAMS = {
     "n_jobs": -1,
     "verbose": -1,
     "random_state": 42
-}
-
-TUNING_SPACE = {
-    "num_leaves": (2, 100),
-    "max_depth": (3, 15),
-    "learning_rate": (0.01, 0.3),
-    "n_estimators": (100, 1000),
-    "min_child_samples": (5, 100),
-    "subsample": (0.6, 1.0),
-    "colsample_bytree": (0.6, 1.0),
-    "reg_alpha": (0.0, 10.0),
-    "reg_lambda": (0.0, 10.0),
-    "min_split_gain": (0.0, 1.0)
 }
 
 
@@ -68,9 +59,30 @@ DATE_FEATURES = ["year", "month", "day", "dayofweek", "quarter", "dayofyear"]
 
 CATEGORICAL_FEATURES = ["equipment", "pickup", "delivery"]
 NUMERICAL_FEATURES = ["distance", "weight", "market_index", "quote_signal"]
-TARGET_COLUMN = "posted_rate"
 
+TARGET_COLUMN = "posted_rate"
 ID_COLUMN = "load_id"
+
+DECEMBER_FIXED = {
+    'pickup': 'Lexington',
+    'delivery': 'Fort Wayne',
+    'distance': 360.0,
+    'equipment': 'Dry Van',
+    'weight': 32000
+}
+
+TUNING_SPACE = {
+    "num_leaves": (16, 64),
+    "max_depth": (4, 12),
+    "learning_rate": (0.01, 0.1),
+    "n_estimators": (200, 1000),
+    "min_child_samples": (10, 50),
+    "subsample": (0.7, 1.0),
+    "colsample_bytree": (0.7, 1.0),
+    "reg_alpha": (0.0, 5.0),
+    "reg_lambda": (0.0, 5.0),
+    "min_split_gain": (0.0, 0.5)
+}
 
 MIN_PREDICTED_RATE = 50.0
 MAX_PREDICTED_RATE = 10000.0

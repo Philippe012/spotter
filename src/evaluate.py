@@ -12,7 +12,7 @@ from src.utils import setup_logger, calculate_rmse, calculate_mae, calculate_map
 
 logger = setup_logger("evaluate")
 
-class ModelEvaluater:
+class ModelEvaluator:
     def __init__(self):
         self.metrics = {}
         self.predictions = None
