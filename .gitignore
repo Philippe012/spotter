@@ -1,4 +1,4 @@
-# Python
+
 __pycache__/
 *.py[cod]
 *$py.class
@@ -10,29 +10,23 @@ ENV/
 env.bak/
 venv.bak/
 
-# Assessment data — not redistributed, reviewer has their own copy
 data/raw/*.csv
 !data/raw/*-template.csv
 !data/raw/*-inputs.csv
 
-# Jupyter
 .ipynb_checkpoints/
 
-# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# OS
 .DS_Store
 Thumbs.db
 
-# Logs
 *.log
 logs/
 
-# Temp files
 tmp/
 temp/
