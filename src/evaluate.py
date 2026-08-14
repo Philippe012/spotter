@@ -54,26 +54,22 @@ class ModelEvaluator:
     
     def plot_residuals(self, y_true: np.ndarray, y_pred: np.ndarray,
                       save_path: Optional[Path] = None) -> plt.Figure:
-        # Creating residual plots
         
         residuals = y_pred - y_true
         fig, axes = plt.subplots(2, 2, figsize=(14, 10))
         
-        # Residuals vs Predicted
         axes[0, 0].scatter(y_pred, residuals, alpha=0.5)
         axes[0, 0].axhline(y=0, color="red", linestyle="--")
         axes[0, 0].set_xlabel("Predicted Rate ($)")
         axes[0, 0].set_ylabel("Residuals ($)")
         axes[0, 0].set_title("Residuals vs Predicted")
         
-        # Residuals histogram
         axes[0, 1].hist(residuals, bins=30, edgecolor="black", alpha=0.7)
         axes[0, 1].axvline(x=0, color="red", linestyle="--")
         axes[0, 1].set_xlabel("Residuals ($)")
         axes[0, 1].set_ylabel("Frequency")
         axes[0, 1].set_title("Residuals Distribution")
         
-        # Actual vs Predicted
         axes[1, 0].scatter(y_true, y_pred, alpha=0.5)
         axes[1, 0].plot([y_true.min(), y_true.max()], 
                        [y_true.min(), y_true.max()], 
@@ -83,7 +79,6 @@ class ModelEvaluator:
         axes[1, 0].set_title("Actual vs Predicted")
         
         
-        # Q-Q plot
         stats.probplot(residuals, dist="norm", plot=axes[1, 1])
         axes[1, 1].set_title("Q-Q Plot of Residuals")
         
@@ -101,7 +96,6 @@ class ModelEvaluator:
                                feature_names: list,
                                save_path: Optional[Path] = None,
                                top_n: int = 20) -> plt.Figure:
-        # Ploting feature importance
         importance_df = feature_importance.copy()
         importance_df["feature_name"] = importance_df["feature"].apply(
             lambda x: feature_names[x] if x < len(feature_names) else f"Feature_{x}"
@@ -132,7 +126,6 @@ class ModelEvaluator:
                               date_col: str = "date",
                               value_col: str = "predicted_rate",
                               save_path: Optional[Path] = None) -> plt.Figure:
-        # Create december chart predictions
         fig, ax = plt.subplots(figsize=(14, 6))
         
         df = df.copy()
